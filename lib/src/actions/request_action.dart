@@ -6,7 +6,7 @@ import 'package:dartz/dartz.dart';
 
 import '../utils/api_request_utils.dart';
 
-enum RequestMethod { GET, POST, PUT, DELETE }
+enum RequestMethod { GET, POST, PUT, DELETE, PATCH }
 
 typedef ResponseBuilder<T> = T Function(dynamic);
 typedef ErrorHandler<E> = Function(ActionRequestError<E> error);
@@ -19,8 +19,7 @@ abstract class RequestAction<T, R extends ApiRequest> {
   }
 
   final RequestClient? _requestClient = RequestClient.instance;
-  final ApiRequestPerformance? _performanceUtils =
-      ApiRequestPerformance.instance;
+  final ApiRequestPerformance? _performanceUtils = ApiRequestPerformance.instance;
   final StreamController<T?> _streamController = StreamController<T?>();
 
   Stream<T?> get stream => _streamController.stream;
@@ -41,6 +40,8 @@ abstract class RequestAction<T, R extends ApiRequest> {
   ResponseBuilder<T> get responseBuilder;
 
   Map<String, dynamic> get toMap => {};
+
+  dynamic get otherData;
 
   var _dataMap;
 
@@ -75,19 +76,12 @@ abstract class RequestAction<T, R extends ApiRequest> {
     }
   }
 
-  RequestAction subscribe(
-      {Function(T? response)? onSuccess,
-      Function()? onDone,
-      Function(Object error)? onError}) {
+  RequestAction subscribe({Function(T? response)? onSuccess, Function()? onDone, Function(Object error)? onError}) {
     stream.listen(onSuccess, onError: onError, onDone: onDone);
     return this;
   }
 
-  RequestAction listen(
-      {Function? onStart,
-      Function? onDone,
-      SuccessHandler<T>? onSuccess,
-      ErrorHandler? onError}) {
+  RequestAction listen({Function? onStart, Function? onDone, SuccessHandler<T>? onSuccess, ErrorHandler? onError}) {
     if (onStart != null) {
       this.onStart = onStart;
     }
@@ -108,8 +102,7 @@ abstract class RequestAction<T, R extends ApiRequest> {
     ActionRequestError? apiRequestError;
     Either<ActionRequestError?, T?>? either;
     log('${authRequired} -- ${await ApiRequestOptions.instance?.getTokenString()}');
-    if (authRequired == false ||
-        (await ApiRequestOptions.instance?.getTokenString()) != null) {
+    if (authRequired == false || (await ApiRequestOptions.instance?.getTokenString()) != null) {
       try {
         response = await _execute();
         try {
@@ -125,8 +118,7 @@ abstract class RequestAction<T, R extends ApiRequest> {
       }
       if (either.isLeft() && apiRequestError != null) {
         this.onError(apiRequestError);
-        if (ApiRequestOptions.instance!.onError != null &&
-            !disableGlobalOnError) {
+        if (ApiRequestOptions.instance!.onError != null && !disableGlobalOnError) {
           ApiRequestOptions.instance!.onError!(apiRequestError);
         }
       }
@@ -149,6 +141,9 @@ abstract class RequestAction<T, R extends ApiRequest> {
         break;
       case RequestMethod.POST:
         _response = await post();
+        break;
+      case RequestMethod.PATCH:
+        _response = await patch();
         break;
       case RequestMethod.PUT:
         _response = await put();
@@ -175,6 +170,9 @@ abstract class RequestAction<T, R extends ApiRequest> {
       case RequestMethod.POST:
         _dynamicCall = post();
         break;
+      case RequestMethod.PATCH:
+        _dynamicCall = patch();
+        break;
       case RequestMethod.PUT:
         _dynamicCall = put();
         break;
@@ -192,49 +190,38 @@ abstract class RequestAction<T, R extends ApiRequest> {
 
   Future<Response?> get() async {
     _query.addAll(Map.of(_dataMap));
-    return await _requestClient?.dio.get(_dynamicPath,
-        queryParameters: _query, options: Options(headers: _headers));
+    return await _requestClient?.dio.get(_dynamicPath, queryParameters: _query, options: Options(headers: _headers));
   }
 
   Future<Response?> post() async {
-    return await _requestClient?.dio.post(_dynamicPath,
-        data: _dataMap,
-        queryParameters: _query,
-        options: Options(headers: _headers));
+    return await _requestClient?.dio.post(_dynamicPath, data: _dataMap, queryParameters: _query, options: Options(headers: _headers));
+  }
+
+  Future<Response?> patch() async {
+    return await _requestClient?.dio.patch(_dynamicPath, data: _dataMap, queryParameters: _query, options: Options(headers: _headers));
   }
 
   Future<Response?> put() async {
-    return await _requestClient?.dio.put(_dynamicPath,
-        data: _dataMap,
-        queryParameters: _query,
-        options: Options(headers: _headers));
+    return await _requestClient?.dio.put(_dynamicPath, data: _dataMap, queryParameters: _query, options: Options(headers: _headers));
   }
 
   Future<Response?> delete() async {
-    return await _requestClient?.dio.delete(_dynamicPath,
-        data: _dataMap,
-        queryParameters: _query,
-        options: Options(headers: _headers));
+    return await _requestClient?.dio.delete(_dynamicPath, data: _dataMap, queryParameters: _query, options: Options(headers: _headers));
   }
 
   _handleRequest(R? request) {
-    Map<String, dynamic> mapData =
-        Map.of(toMap.isNotEmpty ? toMap : request?.toMap() ?? {});
+    Map<String, dynamic> mapData = Map.of(toMap.isNotEmpty ? toMap : request?.toMap() ?? {});
     mapData.addAll(_data);
-    Map<String, dynamic> newData =
-        ApiRequestUtils.handleDynamicPathWithData(path, mapData);
+    Map<String, dynamic> newData = ApiRequestUtils.handleDynamicPathWithData(path, mapData);
     this._dynamicPath = newData['path'];
     this._dataMap = newData['data'];
-    if ((this.contentDataType == ContentDataType.formData ||
-            request?.contentDataType == ContentDataType.formData) &&
-        method != RequestMethod.GET) {
-      this._dataMap = FormData.fromMap(
-          newData['data'], ApiRequestOptions.instance!.listFormat);
+    if ((this.contentDataType == ContentDataType.formData || request?.contentDataType == ContentDataType.formData) && method != RequestMethod.GET) {
+      this._dataMap = FormData.fromMap(newData['data'], ApiRequestOptions.instance!.listFormat);
     } else {
       this._dataMap = newData['data'];
     }
-    _performanceUtils?.init(this.runtimeType.toString(),
-        ApiRequestOptions.instance!.baseUrl! + _dynamicPath);
+    if (otherData != null) this._dataMap = otherData;
+    _performanceUtils?.init(this.runtimeType.toString(), ApiRequestOptions.instance!.baseUrl! + _dynamicPath);
   }
 
   void dispose() {
