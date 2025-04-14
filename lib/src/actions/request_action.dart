@@ -41,7 +41,7 @@ abstract class RequestAction<T, R extends ApiRequest> {
 
   Map<String, dynamic> get toMap => {};
 
-  dynamic get otherData;
+  dynamic get otherData => null;
 
   var _dataMap;
 
