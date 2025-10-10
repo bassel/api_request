@@ -63,7 +63,9 @@ class ActionRequestError<E> implements Exception {
           this.errors = this.response?.data['errors'];
         }
         if (this.response?.data['message'] != null) {
-          message = this.response?.data['message'];
+          message = this.response?.data['message'] is String
+              ? this.response?.data['message']
+              : (this.response?.data['message'] as List).join(', ');
         }
       }
     } else if (apiError is Error) {
